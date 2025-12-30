@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
-import { db } from '../firebase/config';
+import { db } from '../firebase/firebase';
 import Layout from '../components/Layout';
 import toast from 'react-hot-toast';
 
@@ -129,6 +129,9 @@ const RegisterBeneficiary = () => {
 
       // Notify other parts of the app so list updates instantly
       window.dispatchEvent(new CustomEvent('beneficiary-created', { detail: newBeneficiary }));
+
+      // Redirect to beneficiaries list so the user can see the new entry
+      navigate('/beneficiaries');
     } catch (error) {
       toast.error('Failed to register beneficiary');
       console.error(error);

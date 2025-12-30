@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { collection, getDocs, query, where, updateDoc, doc } from 'firebase/firestore';
-import { db } from '../firebase/config';
+import { db } from '../firebase/firebase';
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
@@ -17,22 +17,36 @@ const Distribution = () => {
   const [distributedSchedules, setDistributedSchedules] = useState([]);
   const [pendingSchedules, setPendingSchedules] = useState([]);
   const [markingId, setMarkingId] = useState(null);
+  const [schedulesTotal, setSchedulesTotal] = useState(0);
+  const [showRawSchedules, setShowRawSchedules] = useState(false);
 
-  const { userData } = useAuth();
+  const { userData, currentUser } = useAuth();
 
   useEffect(() => {
     fetchBeneficiaries();
     fetchPendingSchedules();
     fetchDistributedSchedules();
-  }, [filterParam]);
+  }, [filterParam, userData]);
 
   const fetchPendingSchedules = async () => {
     try {
       const schedulesSnapshot = await getDocs(collection(db, 'foodSchedules'));
-      const pending = schedulesSnapshot.docs
-        .filter(doc => doc.data().distributedStatus !== true)
-        .map(doc => ({ id: doc.id, ...doc.data() }));
+
+      console.log('[Distribution] fetchPendingSchedules: total fetched =', schedulesSnapshot.size, 'role=', userData?.role);
+
+      const all = schedulesSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      const pending = all.filter(s => s.distributedStatus !== true);
+
+      // Log diagnostic details for debugging visibility issues
+      pending.forEach(s => console.debug('[Distribution] pending schedule', s.id, 'cnic=', s.cnic, 'distributedStatus=', s.distributedStatus));
+
+      setSchedulesTotal(schedulesSnapshot.size);
       setPendingSchedules(pending);
+
+      // If admin/super_admin, ensure UI refresh (diagnostic)
+      if (userData?.role === 'admin' || userData?.role === 'super_admin') {
+        console.info('[Distribution] role is', userData.role, 'pending count =', pending.length);
+      }
     } catch (error) {
       toast.error('Failed to fetch pending schedules');
       console.error(error);
@@ -64,6 +78,9 @@ const Distribution = () => {
           ...doc.data()
         }));
       setDistributedSchedules(distributed);
+
+      // diagnostic log
+      console.log('[Distribution] fetchDistributedSchedules: count =', distributed.length);
     } catch (error) {
       toast.error('Failed to fetch distributed schedules');
       console.error(error);
@@ -105,11 +122,20 @@ const Distribution = () => {
 
   const handleMarkAsDistributed = async (id) => {
     if (!id) return;
+
+    // Role guard on client: only staff, admin or super_admin may mark as distributed
+    if (!(userData?.role === 'staff' || userData?.role === 'admin' || userData?.role === 'super_admin')) {
+      toast.error('You do not have permission to mark packages as distributed');
+      return;
+    }
+
     setMarkingId(id);
     try {
       await updateDoc(doc(db, 'foodSchedules', id), {
         distributedStatus: true,
-        distributedAt: new Date().toISOString()
+        distributedAt: new Date().toISOString(),
+        distributedBy: currentUser?.uid || null,
+        distributedByName: userData?.name || null
       });
       toast.success('Package marked as Distributed successfully!');
       // Refresh lists
@@ -134,10 +160,31 @@ const Distribution = () => {
     return beneficiary ? beneficiary.name : 'Unknown';
   };
 
+  const formatDateTime = (iso) => {
+    if (!iso) return '';
+    try {
+      return new Date(iso).toLocaleString();
+    } catch (e) {
+      return iso;
+    }
+  };
+
   return (
     <Layout>
       <div className="space-y-6">
         <h1 className="text-3xl font-bold text-gray-800">Food Distribution</h1>
+
+        {/* Diagnostic + quick controls */}
+        <div className="flex items-center gap-3">
+          <div className="text-sm text-gray-600">Schedules fetched: <span className="font-medium text-gray-800">{schedulesTotal}</span></div>
+          <div className="text-sm text-gray-600">Pending: <span className="font-medium text-gray-800">{pendingSchedules.length}</span></div>
+          <div className="text-sm text-gray-600">Distributed: <span className="font-medium text-gray-800">{distributedSchedules.length}</span></div>
+          <button onClick={() => { fetchPendingSchedules(); fetchDistributedSchedules(); }} className="text-sm text-primary hover:underline">Refresh</button>
+          <button onClick={() => setShowRawSchedules(!showRawSchedules)} className="text-sm text-primary hover:underline">{showRawSchedules ? 'Hide raw' : 'Show raw'}</button>
+        </div>
+        {showRawSchedules && (
+          <pre className="mt-3 bg-gray-100 p-3 rounded text-xs overflow-auto max-h-44">{JSON.stringify([...pendingSchedules,...distributedSchedules], null, 2)}</pre>
+        )}
 
         {/* Token Search */}
         <div className="bg-white rounded-lg shadow-md p-6">
@@ -172,15 +219,20 @@ const Distribution = () => {
                 </div>
                 <div>
                   <p className="text-sm text-gray-600">Status</p>
-                  <span
-                    className={`px-3 py-1 inline-flex text-sm font-semibold rounded-full ${
-                      schedule.distributedStatus
-                        ? 'bg-green-100 text-green-800'
-                        : 'bg-yellow-100 text-yellow-800'
-                    }`}
-                  >
-                    {schedule.distributedStatus ? 'Distributed' : 'Pending'}
-                  </span>
+                  <div className="flex flex-col">
+                    <span
+                      className={`px-3 py-1 inline-flex text-sm font-semibold rounded-full ${
+                        schedule.distributedStatus
+                          ? 'bg-green-100 text-green-800'
+                          : 'bg-yellow-100 text-yellow-800'
+                      }`}
+                    >
+                      {schedule.distributedStatus ? 'Distributed' : 'Pending'}
+                    </span>
+                    {schedule.distributedStatus && schedule.distributedByName ? (
+                      <span className="text-xs text-gray-500 mt-1">by {schedule.distributedByName} • {formatDateTime(schedule.distributedAt)}</span>
+                    ) : null}
+                  </div>
                 </div>
                 <div>
                   <p className="text-sm text-gray-600">Beneficiary Name</p>
@@ -251,6 +303,7 @@ const Distribution = () => {
                             onClick={() => handleMarkAsDistributed(sched.id)}
                             disabled={markingId === sched.id}
                             className={`px-3 py-1 rounded text-white ${markingId === sched.id ? 'bg-gray-400' : 'bg-primary hover:bg-green-600'}`}
+                            title="Mark this package as distributed"
                           >
                             {markingId === sched.id ? 'Marking...' : 'Mark as Distributed'}
                           </button>
@@ -293,7 +346,14 @@ const Distribution = () => {
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{schedule.cnic}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{schedule.distributionCenter}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{schedule.pickupDate}</td>
-                      <td className="px-6 py-4 whitespace-nowrap"><span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Distributed</span></td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex flex-col">
+                          <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Distributed</span>
+                          {schedule.distributedByName ? (
+                            <span className="text-xs text-gray-500 mt-1">by {schedule.distributedByName} • {formatDateTime(schedule.distributedAt)}</span>
+                          ) : null}
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

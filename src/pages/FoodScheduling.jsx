@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useSearchParams } from 'react-router-dom';
 import { collection, getDocs, addDoc, query, where } from 'firebase/firestore';
-import { db } from '../firebase/config';
+import { db } from '../firebase/firebase';
 import Layout from '../components/Layout';
 import toast from 'react-hot-toast';
 
@@ -102,12 +102,17 @@ const FoodScheduling = () => {
   // Use explicit centers collection for available distribution centers
   const availableCenters = useMemo(() => centers.map(c => c.name), [centers]);
 
-  // Compute beneficiaries who are not currently scheduled (unscheduled)
+  // Compute beneficiaries who are approved and do not currently have any schedule (unscheduled)
   const unscheduledBeneficiaries = useMemo(() => {
     const scheduledSet = new Set(
-      schedules.filter(s => !s.distributedStatus).map(s => s.cnic)
+      schedules.map(s => String(s.cnic))
     );
-    return beneficiaries.filter(b => !scheduledSet.has(b.cnic));
+    return beneficiaries.filter(b => {
+      const status = String(b.status || '').toLowerCase();
+      const cnic = String(b.cnic || '');
+      // Include only approved beneficiaries and exclude any with existing schedules
+      return status === 'approved' && cnic && !scheduledSet.has(cnic);
+    });
   }, [beneficiaries, schedules]);
 
 

@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { collection, getDocs, doc, updateDoc, query, where } from 'firebase/firestore';
-import { db } from '../firebase/config';
+import { collection, getDocs, doc, getDoc, updateDoc, query, where } from 'firebase/firestore';
+import { db } from '../firebase/firebase';
 import { useAuth } from '../context/AuthContext';
 import Layout from '../components/Layout';
 import toast from 'react-hot-toast';
@@ -86,17 +86,33 @@ const Beneficiaries = () => {
 
     try {
       const beneficiaryRef = doc(db, 'beneficiaries', cnic);
+
+      // Re-check current beneficiary state to prevent race conditions or double-actions
+      const currentSnap = await getDoc(beneficiaryRef);
+      if (currentSnap.exists()) {
+        const data = currentSnap.data();
+        const alreadyFinal = data.statusFinalized === true || data.status === 'approved' || data.status === 'rejected';
+        if (alreadyFinal) {
+          toast.error('This beneficiary has a final status and cannot be changed');
+          // Make sure UI reflects the latest server state
+          fetchBeneficiaries();
+          return;
+        }
+      }
+
       const newStatus = action === 'approve' ? 'approved' : 'rejected';
       
+      // Persist final status flag to prevent future changes
       await updateDoc(beneficiaryRef, { 
         status: newStatus,
-        statusUpdatedAt: new Date().toISOString()
+        statusUpdatedAt: new Date().toISOString(),
+        statusFinalized: true
       });
       
-      // Update local state immediately for better UX
+      // Update local state immediately for better UX and mark as finalized
       setBeneficiaries(prev => 
         prev.map(b => 
-          b.cnic === cnic ? { ...b, status: newStatus } : b
+          b.cnic === cnic ? { ...b, status: newStatus, statusFinalized: true } : b
         )
       );
       
@@ -136,12 +152,28 @@ const Beneficiaries = () => {
   const filteredBeneficiaries = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
     if (!term) return beneficiaries;
-    return beneficiaries.filter(beneficiary =>
-      beneficiary.name?.toLowerCase().includes(term) ||
-      beneficiary.cnic?.toLowerCase().includes(term) ||
-      beneficiary.phone?.toLowerCase().includes(term)
-    );
+    return beneficiaries.filter(beneficiary => {
+      const name = String(beneficiary.name || '').toLowerCase();
+      const cnic = String(beneficiary.cnic || '').toLowerCase();
+      const phone = String(beneficiary.phone || '').toLowerCase();
+      return name.includes(term) || cnic.includes(term) || phone.includes(term);
+    });
   }, [beneficiaries, searchTerm]);
+
+  // Prevent any form submit events originating from within this component from causing navigation
+  // Useful if a global listener or other component mistakenly triggers navigation on submit
+  useEffect(() => {
+    const onSubmitCapture = (e) => {
+      // If the submit originated from within our search container, block it
+      if (e.target && e.target.closest && e.target.closest('.beneficiaries-search-container')) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+
+    window.addEventListener('submit', onSubmitCapture, true);
+    return () => window.removeEventListener('submit', onSubmitCapture, true);
+  }, []);
 
   if (loading) {
     return (
@@ -169,18 +201,24 @@ const Beneficiaries = () => {
         </div>
 
         {/* Search */}
-        <div className="bg-white rounded-lg shadow-md p-4">
-          <div className="relative">
+        <div className="bg-white rounded-lg shadow-md p-4 beneficiaries-search-container">
+          {/* Prevent accidental navigation by ensuring the search isn't part of any form submission */}
+          <form onSubmit={(e) => e.preventDefault()} className="relative">
             <input
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
+              onKeyDownCapture={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); } }}
+              onKeyPressCapture={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); } }}
+              onKeyUpCapture={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); } }}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); } }}
               placeholder="Search by name, CNIC, or phone..."
+              aria-label="Search beneficiaries"
               className="w-full px-4 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
             />
             {searchTerm && (
               <button
+                type="button"
                 onClick={() => setSearchTerm('')}
                 className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
                 title="Clear search"
@@ -188,7 +226,7 @@ const Beneficiaries = () => {
                 ✕
               </button>
             )}
-          </div>
+          </form>
           {searchTerm && (
             <p className="text-xs text-gray-500 mt-2">
               Showing {filteredBeneficiaries.length} of {beneficiaries.length} beneficiaries
@@ -305,7 +343,7 @@ const Beneficiaries = () => {
                             <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">
                               Pending
                             </span>
-                          )}
+                          )} 
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
                         {editingId === beneficiary.id ? (
@@ -333,25 +371,25 @@ const Beneficiaries = () => {
                             </button>
                             <button
                               onClick={() => handleApproveReject(beneficiary.cnic, 'approve')}
-                              disabled={beneficiary.status === 'approved'}
+                              disabled={beneficiary.status === 'approved' || beneficiary.status === 'rejected'}
                               className={`${
-                                beneficiary.status === 'approved'
+                                (beneficiary.status === 'approved' || beneficiary.status === 'rejected')
                                   ? 'text-gray-400 cursor-not-allowed'
                                   : 'text-green-600 hover:text-green-900 hover:bg-green-50'
                               } px-3 py-1 rounded transition-colors`}
-                              title={beneficiary.status === 'approved' ? 'Already approved' : 'Approve beneficiary'}
+                              title={beneficiary.status === 'approved' ? 'Already approved' : (beneficiary.status === 'rejected' ? 'Cannot approve a rejected beneficiary' : 'Approve beneficiary')}
                             >
                               ✓ Approve
                             </button>
                             <button
                               onClick={() => handleApproveReject(beneficiary.cnic, 'reject')}
-                              disabled={beneficiary.status === 'rejected'}
+                              disabled={beneficiary.status === 'approved' || beneficiary.status === 'rejected'}
                               className={`${
-                                beneficiary.status === 'rejected'
+                                (beneficiary.status === 'approved' || beneficiary.status === 'rejected')
                                   ? 'text-gray-400 cursor-not-allowed'
                                   : 'text-red-600 hover:text-red-900 hover:bg-red-50'
                               } px-3 py-1 rounded transition-colors`}
-                              title={beneficiary.status === 'rejected' ? 'Already rejected' : 'Reject beneficiary'}
+                              title={beneficiary.status === 'rejected' ? 'Already rejected' : (beneficiary.status === 'approved' ? 'Cannot reject an approved beneficiary' : 'Reject beneficiary')}
                             >
                               ✗ Reject
                             </button>

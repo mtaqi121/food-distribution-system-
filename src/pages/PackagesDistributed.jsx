@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { collection, getDocs, query, where } from 'firebase/firestore';
-import { db } from '../firebase/config';
+import { db } from '../firebase/firebase';
 import Layout from '../components/Layout';
 import toast from 'react-hot-toast';
 

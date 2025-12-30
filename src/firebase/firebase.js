@@ -1,11 +1,10 @@
-// Import the functions you need from the SDKs you need
+
 import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
-// Your web app's Firebase configuration
-const firebaseConfig = {
+export const firebaseConfig = {
   apiKey: "AIzaSyBPnwXsvcBsiV9a_I4QE3_0mFGGeO1Ik3Q",
   authDomain: "food-distribution-3a52b.firebaseapp.com",
   projectId: "food-distribution-3a52b",
@@ -15,9 +14,7 @@ const firebaseConfig = {
   measurementId: "G-WPED8H86Q2"
 };
 
-// Initialize Firebase
 const app = initializeApp(firebaseConfig);
-// Initialize Analytics only in browser environment
 let analytics = null;
 if (typeof window !== 'undefined') {
   analytics = getAnalytics(app);
@@ -25,4 +22,3 @@ if (typeof window !== 'undefined') {
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export default app;
-

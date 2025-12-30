@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { collection, getDocs, doc, updateDoc, deleteDoc, query, where } from 'firebase/firestore';
-import { db } from '../firebase/config';
+import { db } from '../firebase/firebase';
 import { useAuth } from '../context/AuthContext';
 import Layout from '../components/Layout';
 import toast from 'react-hot-toast';
@@ -96,11 +96,11 @@ const UserManagement = () => {
   return (
     <Layout>
       <div className="space-y-6">
-        <div className="flex justify-between items-center">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center">
           <h1 className="text-3xl font-bold text-gray-800">User Management</h1>
           <button
             onClick={() => setShowCreateModal(true)}
-            className="bg-primary text-white px-6 py-2 rounded-lg font-semibold hover:bg-green-600 transition-colors"
+            className="bg-primary text-white px-4 sm:px-6 py-2 rounded-lg font-semibold hover:bg-green-600 transition-colors mt-3 sm:mt-0 w-full sm:w-auto text-center"
           >
             + Create User
           </button>
@@ -108,38 +108,23 @@ const UserManagement = () => {
 
         {/* Users Table */}
         <div className="bg-white rounded-lg shadow-md overflow-hidden">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Name
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Email
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Role
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Status
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {users.map((user) => (
-                <tr key={user.id}>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    {user.name}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {user.email}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+          {/* Mobile: card list */}
+          <div className="md:hidden p-4 space-y-3">
+            {users.map((user) => (
+              <div key={user.id} className="border border-gray-200 rounded-lg p-3 bg-white shadow-sm">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <div className="text-sm font-medium text-gray-900">{user.name}</div>
+                    <div className="text-xs text-gray-500 break-words">{user.email}</div>
+                  </div>
+                  <div>
+                    <div className={`px-2 py-1 text-xs font-semibold rounded-full ${user.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{user.status}</div>
+                  </div>
+                </div>
+                <div className="mt-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                  <div className="flex items-center gap-2">
                     {user.role === 'super_admin' ? (
-                      <span className="capitalize">{user.role.replace('_', ' ')}</span>
+                      <span className="text-sm capitalize text-gray-700">{user.role.replace('_', ' ')}</span>
                     ) : (
                       <select
                         value={user.role}
@@ -150,42 +135,75 @@ const UserManagement = () => {
                         <option value="staff">Staff</option>
                       </select>
                     )}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span
-                      className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                        user.status === 'active'
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-red-100 text-red-800'
-                      }`}
-                    >
-                      {user.status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                  </div>
+                  <div className="flex gap-2">
                     <button
                       onClick={() => handleToggleStatus(user.id, user.status)}
-                      className={`${
-                        user.status === 'active'
-                          ? 'text-red-600 hover:text-red-900'
-                          : 'text-green-600 hover:text-green-900'
-                      }`}
+                      className={`text-sm font-medium ${user.status === 'active' ? 'text-red-600 hover:text-red-900' : 'text-green-600 hover:text-green-900'}`}
                     >
                       {user.status === 'active' ? 'Deactivate' : 'Activate'}
                     </button>
                     {user.role !== 'super_admin' && (
                       <button
                         onClick={() => handleDeleteUser(user.id)}
-                        className="text-red-600 hover:text-red-900"
+                        className="text-sm text-red-600 hover:text-red-900"
                       >
                         Delete
                       </button>
                     )}
-                  </td>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Desktop / Tablet: table */}
+          <div className="hidden md:block overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200 table-auto">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {users.map((user) => (
+                  <tr key={user.id}>
+                    <td className="px-4 sm:px-6 py-4 whitespace-normal text-sm font-medium text-gray-900 break-words">{user.name}</td>
+                    <td className="px-4 sm:px-6 py-4 whitespace-normal text-sm text-gray-500 break-words">{user.email}</td>
+                    <td className="px-4 sm:px-6 py-4 whitespace-normal text-sm text-gray-500">
+                      {user.role === 'super_admin' ? (
+                        <span className="capitalize">{user.role.replace('_', ' ')}</span>
+                      ) : (
+                        <select
+                          value={user.role}
+                          onChange={(e) => handleRoleChange(user.id, e.target.value)}
+                          className="px-2 py-1 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-sm capitalize bg-white"
+                        >
+                          <option value="admin">Admin</option>
+                          <option value="staff">Staff</option>
+                        </select>
+                      )}
+                    </td>
+                    <td className="px-4 sm:px-6 py-4 whitespace-normal">
+                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${user.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{user.status}</span>
+                    </td>
+                    <td className="px-4 sm:px-6 py-4 whitespace-normal text-sm font-medium">
+                      <div className="flex items-center gap-4">
+                        <button onClick={() => handleToggleStatus(user.id, user.status)} className={`${user.status === 'active' ? 'text-red-600 hover:text-red-900' : 'text-green-600 hover:text-green-900'}`}>{user.status === 'active' ? 'Deactivate' : 'Activate'}</button>
+                        {user.role !== 'super_admin' && (
+                          <button onClick={() => handleDeleteUser(user.id)} className="text-red-600 hover:text-red-900">Delete</button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
 
         {/* Create User Modal */}

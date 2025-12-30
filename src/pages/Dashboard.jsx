@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { collection, getDocs, query, where } from 'firebase/firestore';
-import { db } from '../firebase/config';
+import { collection, getDocs, query, where, onSnapshot } from 'firebase/firestore';
+import { db } from '../firebase/firebase';
 import Layout from '../components/Layout';
 import toast from 'react-hot-toast';
 
@@ -23,6 +23,19 @@ const Dashboard = () => {
     fetchStats();
   }, []);
 
+  // Real-time listener for active distribution centers count
+  useEffect(() => {
+    const centersQuery = query(collection(db, 'distributionCenters'), where('active', '==', true));
+    const unsubscribe = onSnapshot(centersQuery, snapshot => {
+      setStats(prev => ({ ...prev, activeCenters: snapshot.size }));
+    }, (error) => {
+      console.error('Active centers listener failed', error);
+      toast.error('Failed to listen for active centers');
+    });
+
+    return () => unsubscribe();
+  }, []);
+
   const fetchStats = async () => {
     try {
       // Total beneficiaries
@@ -39,19 +52,13 @@ const Dashboard = () => {
         doc => doc.data().distributedStatus === true
       ).length;
 
-      // Active centers (unique distribution centers)
-      const centers = new Set();
-      schedulesSnapshot.docs.forEach(doc => {
-        const center = doc.data().distributionCenter;
-        if (center) centers.add(center);
-      });
-
-      setStats({
+      // Active centers are handled via real-time listener; preserve current activeCenters value
+      setStats(prev => ({
+        ...prev,
         totalBeneficiaries,
         distributedToday,
-        activeCenters: centers.size,
         totalDistributed
-      });
+      }));
     } catch (error) {
       toast.error('Failed to fetch statistics');
       console.error(error);
@@ -134,7 +141,7 @@ const Dashboard = () => {
 
           {/* Active Distribution Centers Card */}
           <div 
-            onClick={() => navigate('/schedule?view=centers')}
+            onClick={() => navigate('/centers?active=true')}
             className="bg-white rounded-lg shadow-md p-4 md:p-6 border-l-4 border-yellow-500 cursor-pointer hover:shadow-lg hover:scale-105 transition-all duration-200 active:scale-100"
           >
             <div className="flex items-center justify-between">

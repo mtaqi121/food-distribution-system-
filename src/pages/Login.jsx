@@ -7,18 +7,34 @@ const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState({ email: '', password: '' });
+  const [generalError, setGeneralError] = useState('');
   const { login } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    // Clear previous errors
+    setFieldErrors({ email: '', password: '' });
+    setGeneralError('');
     setLoading(true);
 
     try {
       await login(email, password);
       navigate('/dashboard');
     } catch (error) {
-      // Error handled in context
+      // Show inline field-specific errors when available
+      const field = error && error.field ? error.field : 'general';
+      const message = (error && error.message) || 'Login failed. Please check your credentials.';
+      if (field === 'email') {
+        setFieldErrors((prev) => ({ ...prev, email: message }));
+      } else if (field === 'password') {
+        setFieldErrors((prev) => ({ ...prev, password: message }));
+      } else {
+        setGeneralError(message);
+      }
+      // Also show a toast for visibility
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -40,11 +56,14 @@ const Login = () => {
             <input
               type="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => { setEmail(e.target.value); setFieldErrors((p) => ({ ...p, email: '' })); setGeneralError(''); }}
               required
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+              aria-invalid={!!fieldErrors.email}
+              aria-describedby={fieldErrors.email ? 'email-error' : undefined}
+              className={`w-full px-4 py-2 border ${fieldErrors.email ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent`}
               placeholder="Enter your email"
             />
+            {fieldErrors.email && <p id="email-error" className="mt-1 text-sm text-red-600">{fieldErrors.email}</p>}
           </div>
 
           <div>
@@ -54,12 +73,17 @@ const Login = () => {
             <input
               type="password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(e) => { setPassword(e.target.value); setFieldErrors((p) => ({ ...p, password: '' })); setGeneralError(''); }}
               required
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+              aria-invalid={!!fieldErrors.password}
+              aria-describedby={fieldErrors.password ? 'password-error' : undefined}
+              className={`w-full px-4 py-2 border ${fieldErrors.password ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent`}
               placeholder="Enter your password"
             />
+            {fieldErrors.password && <p id="password-error" className="mt-1 text-sm text-red-600">{fieldErrors.password}</p>}
           </div>
+
+          {generalError && <p className="text-sm text-red-600 text-center">{generalError}</p>}
 
           <button
             type="submit"
