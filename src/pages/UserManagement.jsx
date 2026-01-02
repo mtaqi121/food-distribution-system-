@@ -4,6 +4,7 @@ import { db } from '../firebase/firebase';
 import { useAuth } from '../context/AuthContext';
 import Layout from '../components/Layout';
 import toast from 'react-hot-toast';
+import validator from 'validator';
 
 const UserManagement = () => {
   const { createUser } = useAuth();
@@ -16,6 +17,58 @@ const UserManagement = () => {
     password: '',
     role: 'admin'
   });
+
+  // Helper functions (copied from SignUp for domain typo suggestions)
+  function levenshtein(a, b) {
+    const dp = Array.from({ length: a.length + 1 }, () => Array(b.length + 1).fill(0));
+    for (let i = 0; i <= a.length; i++) dp[i][0] = i;
+    for (let j = 0; j <= b.length; j++) dp[0][j] = j;
+    for (let i = 1; i <= a.length; i++) {
+      for (let j = 1; j <= b.length; j++) {
+        const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+        dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + cost);
+      }
+    }
+    return dp[a.length][b.length];
+  }
+
+  function isTransposition(a, b) {
+    if (a.length !== b.length) return false;
+    let diff = [];
+    for (let i = 0; i < a.length; i++) {
+      if (a[i] !== b[i]) diff.push(i);
+      if (diff.length > 2) return false;
+    }
+    if (diff.length !== 2) return false;
+    const [i, j] = diff;
+    return a[i] === b[j] && a[j] === b[i];
+  }
+
+  const commonDomains = [
+    'gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'icloud.com', 'aol.com', 'live.com', 'msn.com', 'proton.me', 'protonmail.com', 'yandex.com', 'yandex.ru'
+  ];
+
+  function suggestDomainCorrection(email) {
+    const parts = email.split('@');
+    if (parts.length !== 2) return null;
+    const [local, domain] = parts;
+    let best = null;
+    let bestDist = Infinity;
+    for (const d of commonDomains) {
+      if (d === domain) return null; // exact match
+      const dist = levenshtein(domain, d) || 0;
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = d;
+      }
+      if (isTransposition(domain, d)) {
+        return `${local}@${d}`;
+      }
+    }
+    // allow small distances only
+    if (bestDist <= 2) return `${local}@${best}`;
+    return null;
+  }
 
   useEffect(() => {
     fetchUsers();
@@ -39,8 +92,39 @@ const UserManagement = () => {
 
   const handleCreateUser = async (e) => {
     e.preventDefault();
+
+    // Normalize and validate input to prevent typos like 'agmail.com'
+    const email = (formData.email || '').trim().toLowerCase();
+
+    if (!validator.isEmail(email)) {
+      toast.error('Please enter a valid email address (e.g., name@example.com)');
+      return;
+    }
+
+    const domain = email.split('@')[1];
+    if (!domain || domain.indexOf('.') === -1 || domain.split('.').pop().length < 2) {
+      toast.error('Please enter a valid email domain (e.g., gmail.com)');
+      return;
+    }
+
+    const suggested = suggestDomainCorrection(email);
+    if (suggested) {
+      toast.error(`Did you mean ${suggested}? Please correct the email.`);
+      return;
+    }
+
+    if (formData.password.length < 6) {
+      toast.error('Password must be at least 6 characters');
+      return;
+    }
+
+    if (!formData.name.trim()) {
+      toast.error('Name is required');
+      return;
+    }
+
     try {
-      await createUser(formData.email, formData.password, formData.name, formData.role);
+      await createUser(email, formData.password, formData.name.trim(), formData.role);
       setShowCreateModal(false);
       setFormData({ name: '', email: '', password: '', role: 'admin' });
       fetchUsers();

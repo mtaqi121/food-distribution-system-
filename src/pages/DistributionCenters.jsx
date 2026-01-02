@@ -14,6 +14,7 @@ const DistributionCenters = () => {
   const [centers, setCenters] = useState([]);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState({ name: '', address: '' });
+  const [formErrors, setFormErrors] = useState({ name: '', address: '' });
   const [editingId, setEditingId] = useState(null);
   const [selectedCenter, setSelectedCenter] = useState(null);
   const [selectedCenterStats, setSelectedCenterStats] = useState({ totalSchedules: 0, distributed: 0, pending: 0 });
@@ -82,7 +83,22 @@ const DistributionCenters = () => {
 
   const handleAdd = async (e) => {
     e.preventDefault();
-    if (!form.name.trim()) return toast.error('Center name is required');
+    // Clear previous errors
+    setFormErrors({ name: '', address: '' });
+    let hasError = false;
+    if (!form.name.trim()) {
+      setFormErrors((p) => ({ ...p, name: 'Center name is required' }));
+      hasError = true;
+    }
+    if (!form.address.trim()) {
+      setFormErrors((p) => ({ ...p, address: 'Address is required' }));
+      hasError = true;
+    }
+    if (hasError) {
+      toast.error('Please fix the errors in the form');
+      return;
+    }
+
     setLoading(true);
     try {
       await addDoc(collection(db, 'distributionCenters'), {
@@ -93,6 +109,7 @@ const DistributionCenters = () => {
       });
       toast.success('Center added');
       setForm({ name: '', address: '' });
+      setFormErrors({ name: '', address: '' });
       fetchCenters();
       window.dispatchEvent(new Event('centers-updated'));
     } catch (error) {
@@ -114,7 +131,22 @@ const DistributionCenters = () => {
   };
 
   const handleSave = async (id) => {
-    if (!form.name.trim()) return toast.error('Center name is required');
+    // Clear previous errors
+    setFormErrors({ name: '', address: '' });
+    let hasError = false;
+    if (!form.name.trim()) {
+      setFormErrors((p) => ({ ...p, name: 'Center name is required' }));
+      hasError = true;
+    }
+    if (!form.address.trim()) {
+      setFormErrors((p) => ({ ...p, address: 'Address is required' }));
+      hasError = true;
+    }
+    if (hasError) {
+      toast.error('Please fix the errors in the form');
+      return;
+    }
+
     setLoading(true);
     try {
       await updateDoc(doc(db, 'distributionCenters', id), {
@@ -124,6 +156,7 @@ const DistributionCenters = () => {
       toast.success('Center updated');
       setEditingId(null);
       setForm({ name: '', address: '' });
+      setFormErrors({ name: '', address: '' });
       fetchCenters();
       window.dispatchEvent(new Event('centers-updated'));
     } catch (error) {
@@ -203,18 +236,26 @@ const DistributionCenters = () => {
                 <input
                   type="text"
                   value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                  onChange={(e) => { setForm({ ...form, name: e.target.value }); setFormErrors((p) => ({ ...p, name: '' })); }}
+                  required
+                  aria-invalid={!!formErrors.name}
+                  aria-describedby={formErrors.name ? 'name-error' : undefined}
+                  className={`w-full px-4 py-2 border ${formErrors.name ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent`}
                 />
+                {formErrors.name && <p id="name-error" className="mt-1 text-sm text-red-600">{formErrors.name}</p>}
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Address</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Address <span className="text-red-500">*</span></label>
                 <input
                   type="text"
                   value={form.address}
-                  onChange={(e) => setForm({ ...form, address: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                  onChange={(e) => { setForm({ ...form, address: e.target.value }); setFormErrors((p) => ({ ...p, address: '' })); }}
+                  required
+                  aria-invalid={!!formErrors.address}
+                  aria-describedby={formErrors.address ? 'address-error' : undefined}
+                  className={`w-full px-4 py-2 border ${formErrors.address ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent`}
                 />
+                {formErrors.address && <p id="address-error" className="mt-1 text-sm text-red-600">{formErrors.address}</p>}
               </div>
               <div className="flex items-center space-x-2">
                 <button

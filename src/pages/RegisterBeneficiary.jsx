@@ -20,8 +20,8 @@ const RegisterBeneficiary = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // If staff does not have create permission, redirect them
-    if (userData?.role === 'staff' && !userData?.canCreateBeneficiaries) {
+    // Only redirect staff if the create permission is explicitly set to false in their user record
+    if (userData?.role === 'staff' && userData?.canCreateBeneficiaries === false) {
       navigate('/unauthorized');
     }
   }, [userData, navigate]);
@@ -87,8 +87,8 @@ const RegisterBeneficiary = () => {
         return;
       }
 
-      // Check role permissions again before creating
-      if (userData?.role === 'staff' && !userData?.canCreateBeneficiaries) {
+      // Check role permissions again before creating; only block if explicitly disabled
+      if (userData?.role === 'staff' && userData?.canCreateBeneficiaries === false) {
         toast.error('You are not allowed to create beneficiaries');
         setLoading(false);
         return;

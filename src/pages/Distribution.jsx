@@ -20,7 +20,7 @@ const Distribution = () => {
   const [schedulesTotal, setSchedulesTotal] = useState(0);
   const [showRawSchedules, setShowRawSchedules] = useState(false);
 
-  const { userData, currentUser } = useAuth();
+  const { userData, currentUser, hasRole, isStaff, isAdmin, isSuperAdmin } = useAuth();
 
   useEffect(() => {
     fetchBeneficiaries();
@@ -28,25 +28,23 @@ const Distribution = () => {
     fetchDistributedSchedules();
   }, [filterParam, userData]);
 
+  // Auto-search when ?token= is present so users (including staff) can open details by clicking rows
+  useEffect(() => {
+    const tokenParam = searchParams.get('token');
+    if (tokenParam) {
+      handleSearch(tokenParam);
+    }
+  }, [searchParams]);
+
   const fetchPendingSchedules = async () => {
     try {
       const schedulesSnapshot = await getDocs(collection(db, 'foodSchedules'));
 
-      console.log('[Distribution] fetchPendingSchedules: total fetched =', schedulesSnapshot.size, 'role=', userData?.role);
-
       const all = schedulesSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
       const pending = all.filter(s => s.distributedStatus !== true);
 
-      // Log diagnostic details for debugging visibility issues
-      pending.forEach(s => console.debug('[Distribution] pending schedule', s.id, 'cnic=', s.cnic, 'distributedStatus=', s.distributedStatus));
-
       setSchedulesTotal(schedulesSnapshot.size);
       setPendingSchedules(pending);
-
-      // If admin/super_admin, ensure UI refresh (diagnostic)
-      if (userData?.role === 'admin' || userData?.role === 'super_admin') {
-        console.info('[Distribution] role is', userData.role, 'pending count =', pending.length);
-      }
     } catch (error) {
       toast.error('Failed to fetch pending schedules');
       console.error(error);
@@ -79,16 +77,16 @@ const Distribution = () => {
         }));
       setDistributedSchedules(distributed);
 
-      // diagnostic log
-      console.log('[Distribution] fetchDistributedSchedules: count =', distributed.length);
+      // set distributed schedules state (count available in distributed.length)
     } catch (error) {
       toast.error('Failed to fetch distributed schedules');
       console.error(error);
     }
   };
 
-  const handleSearch = async () => {
-    if (!token.trim()) {
+  const handleSearch = async (searchToken) => {
+    const tokenToSearch = ((searchToken ?? token) || '').trim();
+    if (!tokenToSearch) {
       toast.error('Please enter a token');
       return;
     }
@@ -97,7 +95,7 @@ const Distribution = () => {
     try {
       const schedulesQuery = query(
         collection(db, 'foodSchedules'),
-        where('token', '==', token.toUpperCase())
+        where('token', '==', tokenToSearch.toUpperCase())
       );
       const schedulesSnapshot = await getDocs(schedulesQuery);
 
@@ -110,6 +108,7 @@ const Distribution = () => {
           id: schedulesSnapshot.docs[0].id,
           ...scheduleData
         });
+        setToken(tokenToSearch.toUpperCase());
         toast.success('Token found');
       }
     } catch (error) {
@@ -123,8 +122,8 @@ const Distribution = () => {
   const handleMarkAsDistributed = async (id) => {
     if (!id) return;
 
-    // Role guard on client: only staff, admin or super_admin may mark as distributed
-    if (!(userData?.role === 'staff' || userData?.role === 'admin' || userData?.role === 'super_admin')) {
+    // Role guard on client: only admin or super_admin may mark as distributed
+    if (!hasRole(['admin','super_admin'])) {
       toast.error('You do not have permission to mark packages as distributed');
       return;
     }
@@ -211,6 +210,7 @@ const Distribution = () => {
         {schedule && (
           <div className="bg-white rounded-lg shadow-md p-6">
             <h2 className="text-xl font-semibold text-gray-800 mb-4">Schedule Details</h2>
+            {isStaff && <div className="text-xs text-blue-600 mb-2">You have read-only access to this schedule.</div>}
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -256,7 +256,7 @@ const Distribution = () => {
                 </div>
               </div>
 
-              {!schedule.distributedStatus && (userData?.role === 'staff' || userData?.role === 'admin' || userData?.role === 'super_admin') && (
+              {!schedule.distributedStatus && (userData?.role === 'admin' || userData?.role === 'super_admin') && (
                 <button
                   onClick={handleMarkDistributed}
                   className="w-full bg-primary text-white py-3 rounded-lg font-semibold hover:bg-green-600 transition-colors"
@@ -298,7 +298,7 @@ const Distribution = () => {
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{sched.pickupDate}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{sched.pickupTime}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        {(userData?.role === 'staff' || userData?.role === 'admin' || userData?.role === 'super_admin') ? (
+                        {(userData?.role === 'admin' || userData?.role === 'super_admin') ? (
                           <button
                             onClick={() => handleMarkAsDistributed(sched.id)}
                             disabled={markingId === sched.id}

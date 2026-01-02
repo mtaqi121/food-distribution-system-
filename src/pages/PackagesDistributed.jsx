@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../firebase/firebase';
 import Layout from '../components/Layout';
@@ -19,7 +20,11 @@ const isDateInRange = (dateStr, start, end) => {
   return dd >= new Date(start.getFullYear(), start.getMonth(), start.getDate()).getTime() && dd <= new Date(end.getFullYear(), end.getMonth(), end.getDate()).getTime();
 };
 
+import { useAuth } from '../context/AuthContext';
+
 const PackagesDistributed = () => {
+  const { userData, isStaff } = useAuth();
+  const navigate = useNavigate();
   const [schedules, setSchedules] = useState([]);
   const [beneficiaries, setBeneficiaries] = useState([]);
   const [centers, setCenters] = useState([]);
@@ -130,6 +135,13 @@ const PackagesDistributed = () => {
 
         {/* Filters */}
         <div className="bg-white rounded-lg shadow-md p-4">
+          <div className="flex items-center justify-between mb-3">
+            <div className="text-sm text-gray-700">Filters</div>
+            {isStaff && (
+              <div className="text-xs text-blue-600 font-medium">You have read-only access to distributed packages</div>
+            )}
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm text-gray-600 mb-2">Date Filter</label>
@@ -183,7 +195,7 @@ const PackagesDistributed = () => {
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {filtered.map(item => (
-                  <tr key={item.id}>
+                  <tr key={item.id} role="button" tabIndex={0} className="hover:bg-gray-50 cursor-pointer" onClick={() => navigate(`/distribution?token=${item.token}`)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/distribution?token=${item.token}`); } }}>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{getBeneficiaryName(item.cnic)}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.cnic}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.distributionCenter}</td>

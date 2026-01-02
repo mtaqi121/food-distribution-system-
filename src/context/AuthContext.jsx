@@ -21,6 +21,7 @@ import {
 } from 'firebase/firestore';
 import { auth, db, firebaseConfig } from '../firebase/firebase';
 import toast from 'react-hot-toast';
+import validator from 'validator';
 
 // Map Firebase auth errors to user-friendly messages and indicate affected field
 function sanitizeAuthError(error) {
@@ -36,6 +37,8 @@ function sanitizeAuthError(error) {
     'auth/network-request-failed': { message: 'Network error. Please check your internet connection and try again.', field: 'general' },
     'auth/email-already-in-use': { message: 'An account with this email already exists.', field: 'email' },
     'auth/weak-password': { message: 'Password is too weak. It must be at least 6 characters.', field: 'password' },
+  
+    'custom/account-deactivated': { message: 'Your account has been deactivated. Please contact the administrator.', field: 'general' },
     default: { message: 'Operation failed. Please check your email and password and try again.', field: 'general' }
   };
 
@@ -44,6 +47,8 @@ function sanitizeAuthError(error) {
   // Handle some custom thrown messages
   if (message.includes('Email already exists')) return { code: 'custom/email-already-exists', message: map['auth/email-already-in-use'].message, field: 'email' };
   if (message.includes('User data not found')) return { code: 'custom/user-data-not-found', message: 'Account not found. Please contact support.', field: 'email' };
+  // If an error message mentions deactivation, prefer the clear deactivation message
+  if (message.toLowerCase().includes('deactiv')) return { code: 'custom/account-deactivated', message: map['custom/account-deactivated'].message, field: 'general' };
 
   return { code: code || 'unknown', ...map.default };
 }
@@ -70,7 +75,22 @@ export const AuthProvider = ({ children }) => {
         // Fetch user data from Firestore
         const userDoc = await getDoc(doc(db, 'users', user.uid));
         if (userDoc.exists()) {
-          setUserData(userDoc.data());
+          const data = userDoc.data();
+          // If user has been deactivated in Firestore, sign them out immediately and show a clear message
+          if (data.status === 'inactive') {
+            try {
+              await signOut(auth);
+            } catch (e) {
+              // ignore sign out errors
+            }
+            toast.error('Your account has been deactivated. Please contact the administrator.');
+            setCurrentUser(null);
+            setUserData(null);
+            setLoading(false);
+            return;
+          }
+
+          setUserData(data);
         } else {
           setUserData(null);
         }
@@ -96,7 +116,10 @@ export const AuthProvider = ({ children }) => {
       const userData = userDoc.data();
       if (userData.status === 'inactive') {
         await signOut(auth);
-        throw new Error('Your account has been deactivated');
+        const err = new Error('Your account has been deactivated');
+        err.code = 'custom/account-deactivated';
+        err.field = 'general';
+        throw err;
       }
 
       toast.success('Login successful!');
@@ -124,9 +147,30 @@ export const AuthProvider = ({ children }) => {
 
   const createUser = async (email, password, name, role) => {
     try {
+      // Normalize and validate input
+      const normalizedEmail = (email || '').trim().toLowerCase();
+      if (!validator.isEmail(normalizedEmail)) {
+        const err = new Error('Invalid email address format.');
+        err.code = 'auth/invalid-email';
+        err.field = 'email';
+        throw err;
+      }
+      if (!name || !name.trim()) {
+        const err = new Error('Name is required');
+        err.code = 'custom/name-required';
+        err.field = 'general';
+        throw err;
+      }
+      if (!password || password.length < 6) {
+        const err = new Error('Password is too weak. It must be at least 6 characters.');
+        err.code = 'auth/weak-password';
+        err.field = 'password';
+        throw err;
+      }
+
       // Check if email already exists in Firestore
       const usersRef = collection(db, 'users');
-      const q = query(usersRef, where('email', '==', email));
+      const q = query(usersRef, where('email', '==', normalizedEmail));
       const querySnapshot = await getDocs(q);
 
       if (!querySnapshot.empty) {
@@ -146,8 +190,8 @@ export const AuthProvider = ({ children }) => {
         // Create user document in Firestore using the main db instance
         await setDoc(doc(db, 'users', userCredential.user.uid), {
           uid: userCredential.user.uid,
-          name,
-          email,
+          name: name.trim(),
+          email: normalizedEmail,
           role,
           status: 'active',
           createdAt: serverTimestamp()
@@ -178,13 +222,27 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const isSuperAdmin = userData?.role === 'super_admin';
+  const isAdmin = userData?.role === 'admin';
+  const isStaff = userData?.role === 'staff';
+
+  const hasRole = (roles = []) => {
+    if (!userData || !userData.role) return false;
+    return roles.includes(userData.role);
+  };
+
   const value = {
     currentUser,
     userData,
     loading,
     login,
     logout,
-    createUser
+    createUser,
+    // role helpers
+    isSuperAdmin,
+    isAdmin,
+    isStaff,
+    hasRole
   };
 
   return (

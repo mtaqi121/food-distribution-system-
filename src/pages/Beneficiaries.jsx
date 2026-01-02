@@ -190,7 +190,7 @@ const Beneficiaries = () => {
       <div className="space-y-6">
         <div className="flex justify-between items-center">
           <h1 className="text-3xl font-bold text-gray-800">Beneficiaries</h1>
-          {(isAdmin || (isStaff && userData?.canCreateBeneficiaries)) && (
+          {(isAdmin || (isStaff && userData?.canCreateBeneficiaries !== false)) && (
             <Link
               to="/register-beneficiary"
               className="bg-primary text-white px-6 py-2 rounded-lg font-semibold hover:bg-green-600 transition-colors"

@@ -126,14 +126,18 @@ const Dashboard = () => {
 
           {/* Packages Distributed Card */}
           <div 
-            onClick={() => { if (userData?.role === 'staff') return; navigate('/packages-distributed'); }}
-            className={`bg-white rounded-lg shadow-md p-4 md:p-6 border-l-4 border-blue-500 transition-all duration-200 active:scale-100 ${userData?.role === 'staff' ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer hover:shadow-lg hover:scale-105'}`}
+            role="button"
+            tabIndex={0}
+            onClick={() => navigate('/packages-distributed')}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate('/packages-distributed'); } }}
+            className="bg-white rounded-lg shadow-md p-4 md:p-6 border-l-4 border-blue-500 cursor-pointer hover:shadow-lg hover:scale-105 transition-all duration-200 active:scale-100"
           >
             <div className="flex items-center justify-between">
               <div className="flex-1 min-w-0">
                 <p className="text-gray-600 text-xs md:text-sm font-medium">Packages Distributed</p>
                 <p className="text-2xl md:text-3xl font-bold text-gray-800 mt-1 md:mt-2">{stats.totalDistributed}</p>
                 <p className="text-xs text-blue-500 mt-1 md:mt-2 font-medium hidden sm:block">Click to view details →</p>
+                {userData?.role === 'staff' && <p className="text-xs text-blue-600 mt-1 md:mt-2 font-medium hidden sm:block">Read-only access</p>}
               </div>
               <div className="text-3xl md:text-4xl ml-2 flex-shrink-0">📦</div>
             </div>

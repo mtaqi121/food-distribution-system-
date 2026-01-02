@@ -46,6 +46,10 @@ const Layout = ({ children }) => {
         { path: '/beneficiaries', label: 'View Beneficiaries', icon: '👤' },
         { path: '/distribution', label: 'Distribution', icon: '📦' }
       );
+      // Allow staff to see register page unless explicitly disabled via canCreateBeneficiaries === false
+      if (userData?.canCreateBeneficiaries !== false) {
+        items.push({ path: '/register-beneficiary', label: 'Register Beneficiary', icon: '➕' });
+      }
     }
 
     return items;

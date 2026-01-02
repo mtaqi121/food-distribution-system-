@@ -69,7 +69,7 @@ export default function AppRouter() {
         <Route
           path="/centers"
           element={
-            <ProtectedRoute allowedRoles={["admin", "super_admin"]}>
+            <ProtectedRoute allowedRoles={["admin", "super_admin", "staff"]}>
               <DistributionCenters />
             </ProtectedRoute>
           }
